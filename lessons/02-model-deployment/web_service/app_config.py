@@ -1,6 +1,10 @@
-# MODELS
-MODEL_VERSION = "0.0.1"
-PATH_TO_PIPELINE = ...  # TODO: fill in the path to the pipeline
+"""Application metadata and paths independent of the working directory."""
+
+from pathlib import Path
+
+MODEL_FOLDER = Path(__file__).resolve().parent / "local_models"
+PATH_TO_PIPELINE = MODEL_FOLDER / "pipeline.joblib"
+PATH_TO_METADATA = MODEL_FOLDER / "metadata.json"
 
 
 # MISC

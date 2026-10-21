@@ -30,3 +30,6 @@ coverage.xml
 .pytest_cache
 .hypothesis
 .idea
+**/tests/
+**/.ipynb_checkpoints/
+solution.zip

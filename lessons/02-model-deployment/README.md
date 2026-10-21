@@ -1,5 +1,80 @@
 # Model Deployment
 
+## Completed lab: run the service
+
+Run the introduction and experiment-tracking notebooks first, using the repository's
+Python 3.11 environment (`uv sync`). The API only needs inference code, not training
+code or a running MLflow server. The export step copies the registered model and its
+matching fitted DictVectorizer into one portable sklearn pipeline.
+
+From `lessons/02-model-deployment`:
+
+```bash
+uv run python prepare_model.py
+# Optional: pin an exact existing registry version instead of resolving Production:
+# uv run python prepare_model.py --model-version 1
+cd web_service
+uv run uvicorn main:app --reload
+```
+
+Open http://localhost:8000/docs. `GET /` describes the app and loaded model version;
+`GET /health` reports readiness. To predict an ordered batch:
+
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H 'Content-Type: application/json' \
+  -d '{"trips":[{"PULocationID":161,"DOLocationID":236,"passenger_count":1}]}'
+```
+
+The response contains `model_version` and an ordered `predictions` list with
+`predicted_duration_minutes` and `outside_training_range`. Inputs are strict integer
+zone IDs from 1 to 265 and passenger counts from 1 to 6; an omitted or null passenger
+count uses the training-time `-1` sentinel. The body must contain 1–1000 trips. Extra
+fields and invalid values return 422. Unseen valid zones use the fitted vectorizer's
+standard ignore-unknown behavior; the API never refits it.
+
+**Model limitation:** estimates are raw, not clipped. Values outside the training
+target range of 1–60 minutes are explicitly flagged, including negative estimates.
+Consumers should not present flagged values as reliable booking estimates. Invalid
+non-finite model output returns 503. Improving the underlying regressor is separate
+from packaging its inference behavior.
+
+### Container
+
+Start Docker Desktop, then run from `lessons/02-model-deployment` (not the repository
+root). Export artifacts before building; the build deliberately fails if they are absent.
+
+```bash
+docker build -t taxi-duration:lab -f Dockerfile.app .
+docker run --rm --name taxi-duration -p 127.0.0.1:8000:8000 taxi-duration:lab
+```
+
+The same curl request and `/docs` work with the container. The application binds to
+`0.0.0.0:8000` inside the image, runs as a non-root user, and has a `/health` check.
+Only inference dependencies are installed; training data, MLflow runs and credentials
+are excluded. Stop it with `docker stop taxi-duration` from another terminal.
+
+The exported `local_models/pipeline.joblib` and `metadata.json` remain git-ignored,
+matching the lab's existing policy. A fresh clone must reproduce the preceding
+notebooks and run the export command; a Docker build does not download or train models.
+Only export/load trusted model artifacts: joblib/pickle deserialization can execute code.
+
+### Automated checks
+
+From `lessons/02-model-deployment/web_service`:
+
+```bash
+uv run --with httpx==0.27.2 python -m unittest discover -s tests -v
+```
+
+The test-only HTTP client version is compatible with the course's pinned Starlette.
+Tests use synthetic artifacts, not the training data, and cover readiness, docs,
+batch order, prediction parity, missing/unknown categories, validation, output
+warnings, non-finite output, missing artifacts and incompatible metadata.
+
+The optional live MLflow-registry selection extension is not needed for this offline,
+versioned deployment. Select a different version during export and rebuild the image.
+
 ## Introduction
 
 In this module, we will learn how to:

@@ -1,12 +1,22 @@
-FROM python:3.11.6-slim
-##### Enter your code here #####
-# You can find A LOT of resources on the internet (good example: https://docs.docker.com/get-started/docker-concepts/building-images/writing-a-dockerfile/)
-# Don't forget to :
-# - Install the app dependencies
-#   - Install uv on the container: COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-#   - Copy the dependencies into the image: COPY pyproject.toml uv.lock ./
-#   - Install dependencies: RUN uv sync --locked
-# - Expose the correct port
-# - Copy your files in the container
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
 WORKDIR /web_service
-# - Initialize the app with uvicorn
+
+COPY requirements_app.txt /web_service/requirements_app.txt
+RUN pip install --no-cache-dir -r requirements_app.txt \
+    && useradd --create-home app
+
+COPY --chown=app:app web_service/ /web_service/
+# Fail the build early if the required, git-ignored artifacts were not exported.
+RUN test -s local_models/pipeline.joblib && test -s local_models/metadata.json
+
+USER app
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
+    CMD python -c "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health', timeout=3)"
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
